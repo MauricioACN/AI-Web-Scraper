@@ -1,5 +1,7 @@
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
+from langchain.chat_models import init_chat_model
+
 
 template = (
     "You are tasked with extracting specific information from the following text content: {dom_content}. "
@@ -10,7 +12,12 @@ template = (
     "4. **Direct Data Only:** Your output should contain only the data that is explicitly requested, with no other text."
 )
 
-model = OllamaLLM(model="llama3")
+model = init_chat_model(
+    model="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
+    base_url="http://localhost:1234/v1",
+    api_key="lm-studio",
+    model_provider="openai",
+)
 
 
 def parse_with_ollama(dom_chunks, parse_description):
@@ -26,4 +33,5 @@ def parse_with_ollama(dom_chunks, parse_description):
         print(f"Parsed batch: {i} of {len(dom_chunks)}")
         parsed_results.append(response)
 
-    return "\n".join(parsed_results)
+    # return "\n".join(parsed_results)
+    return "\n".join([msg.content for msg in parsed_results])

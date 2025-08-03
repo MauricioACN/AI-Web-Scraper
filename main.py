@@ -4,8 +4,10 @@ from scrape import (
     extract_body_content,
     clean_body_content,
     split_dom_content,
+    fetch_reviews,
+    fetch_highlights,
+    fetch_features,
 )
-from parse import parse_with_ollama
 
 # Streamlit UI
 st.title("AI Web Scraper")
@@ -38,6 +40,25 @@ if "dom_content" in st.session_state:
             st.write("Parsing the content...")
 
             # Parse the content with Ollama
-            dom_chunks = split_dom_content(st.session_state.dom_content)
-            parsed_result = parse_with_ollama(dom_chunks, parse_description)
+            # dom_chunks = split_dom_content(st.session_state.dom_content)
+            # parsed_result = parse_with_ollama(dom_chunks, parse_description)
+            product_id = "0762121P"  # Producto de prueba
+
+            print("Fetching reviews...")
+            reviews = fetch_reviews(product_id)
+            print(f"✅ Total reviews fetched: {len(reviews)}")
+
+            print("\nFetching highlights...")
+            highlights = fetch_highlights(product_id)
+            print(f"✅ Highlights found: {len(highlights.keys())}")
+
+            print("\nFetching features...")
+            features = fetch_features(product_id)
+            print(f"✅ Features found: {[f['feature'] for f in features]}")
+
+            parsed_result = {
+                "reviews": reviews,
+                "highlights": highlights,
+                "features": features
+            }
             st.write(parsed_result)
