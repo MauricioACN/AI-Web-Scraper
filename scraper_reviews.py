@@ -202,9 +202,6 @@ def scrape_product_reviews_batch(product_list, max_workers=5):
     return results
 
 
-# ...existing code...
-
-
 def extract_category_from_breadcrumb(breadcrumb_list):
     """
     Extracts the main category from breadcrumb
@@ -541,8 +538,6 @@ def test_different_pagination_strategies(search_term="tools"):
 
     return results
 
-# Update main function to use improved version
-
 
 def massive_product_analysis_v5_optimized(total_limit=350, batch_size=50):
     """
@@ -560,9 +555,13 @@ def massive_product_analysis_v5_optimized(total_limit=350, batch_size=50):
 
     # Step 2: Get products with improved pagination
     search_terms = [
-        "tools", "electronics", "home", "automotive", "sports",
-        "appliances", "toys", "hardware", "outdoor", "bedroom",
-        "kitchen", "bathroom", "garden", "camping", "fitness"
+        "power tools", "hand tools", "kitchen appliances", "bathroom fixtures",
+        "outdoor furniture", "camping gear", "fitness equipment", "automotive parts",
+        "home security", "lighting fixtures", "storage solutions", "cleaning supplies",
+        "pet supplies", "baby products", "seasonal decorations", "plumbing supplies",
+        "electrical components", "paint supplies", "flooring materials", "window treatments",
+        "garage organization", "lawn care", "snow removal", "pool supplies",
+        "workshop equipment", "safety gear", "heating cooling", "smart home devices"
     ]
 
     all_products = []
