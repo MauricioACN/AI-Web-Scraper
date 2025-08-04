@@ -340,29 +340,3 @@ scraper.selenium_scraper = SeleniumScraper(headless=False)  # See browser
 3. **Filter existing products** to avoid re-scraping
 4. **Use threading judiciously** (2-3 workers typically optimal)
 5. **Monitor rate limits** and adjust delays as needed
-
-## 🤝 Contributing
-
-This module is designed to be easily extensible:
-
-- Add new scrapers in `scrapers/`
-- Extend data models in `models/`
-- Add utilities in `utils/`
-- Enhance CLI commands in `cli.py`
-
-## 📄 License
-
-This project is for educational and research purposes. Please respect Canadian Tire's terms of service and robots.txt when using this scraper.
-
-## 🆘 Support
-
-For issues or questions:
-
-1. Check the troubleshooting section above
-2. Review the examples in `examples.py`
-3. Ensure all dependencies are correctly installed
-4. Verify your environment variables are set
-
-## 📝 Examples
-
-See `examples.py` for comprehensive usage examples covering all features of the module.
