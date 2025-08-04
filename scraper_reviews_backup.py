@@ -147,21 +147,50 @@ def export_reviews_to_json(reviews, highlights, features, filename):
     print(f"✅ JSON saved as {filename}")
 
 
-def scrape_product_reviews_batch(product_list, max_workers=3, save_to_folder="data_review"):
+def scrape_product_reviews_batch(product_list, max_workers=5):
     """
-    Massive review scraping using threading with unified logic
+    Massive review scraping using threading
     """
-    def scrape_wrapper(product):
-        return scrape_single_product_optimized(
-            product['product_id'],
-            product.get('name', 'Unknown Product'),
-            save_to_folder
-        )
+    def scrape_single_product(product):
+        product_id = product['product_id']
+        print(f"🔄 Processing {product['name']} ({product_id})")
+
+        try:
+            # Fetch data for this product
+            # Limit for efficiency
+            reviews = fetch_reviews(product_id, limit=50)
+            highlights = fetch_highlights(product_id)
+            features = fetch_features(product_id)
+
+            if reviews:
+                filename = f"reviews_{product_id}.json"
+                export_reviews_to_json(reviews, highlights, features, filename)
+                return {
+                    'product_id': product_id,
+                    'name': product['name'],
+                    'status': 'success',
+                    'reviews_count': len(reviews),
+                    'filename': filename
+                }
+            else:
+                return {
+                    'product_id': product_id,
+                    'name': product['name'],
+                    'status': 'no_reviews',
+                    'reviews_count': 0
+                }
+        except Exception as e:
+            return {
+                'product_id': product_id,
+                'name': product['name'],
+                'status': 'error',
+                'error': str(e)
+            }
 
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_product = {
-            executor.submit(scrape_wrapper, product): product
+            executor.submit(scrape_single_product, product): product
             for product in product_list
         }
 
@@ -204,50 +233,30 @@ def get_main_image(images):
 def load_existing_scraped_products():
     """
     Loads the list of products that have been successfully scraped
-    Updated to use organized folder structure and handle different JSON formats
     """
     scraped_products = set()
 
-    # Search for existing review files in data_review folder
-    review_files = glob.glob("data_review/reviews_*.json")
+    # Search for existing review files
+    review_files = glob.glob("reviews_*.json")
     for file in review_files:
         # Extract product_id from filename
-        product_id = os.path.basename(file).replace(
-            "reviews_", "").replace(".json", "")
-        scraped_products.add(product_id)
-
-    # Also search in root directory for legacy files
-    legacy_files = glob.glob("reviews_*.json")
-    for file in legacy_files:
         product_id = file.replace("reviews_", "").replace(".json", "")
         scraped_products.add(product_id)
 
-    # Load from previous summaries
-    summary_files = glob.glob("scraping_summary*.json") + \
-        glob.glob("retry_summary/*.json")
+    # Also load from previous summaries if they exist
+    summary_files = ["scraping_summary.json", "scraping_summary_v3.json"]
     for summary_file in summary_files:
-        try:
-            with open(summary_file, "r", encoding="utf-8") as f:
-                summary_data = json.load(f)
+        if os.path.exists(summary_file):
+            try:
+                with open(summary_file, "r", encoding="utf-8") as f:
+                    summary = json.load(f)
 
-            # Handle different JSON structures
-            if isinstance(summary_data, dict) and 'results' in summary_data:
-                results_list = summary_data.get('results', [])
-            elif isinstance(summary_data, list):
-                results_list = summary_data
-            else:
-                print(f"⚠️ Skipping {summary_file} - unexpected format")
-                continue
-
-            # Add successfully scraped products
-            for result in results_list:
-                if isinstance(result, dict) and result.get('status') == 'success':
-                    product_id = result.get('product_id')
-                    if product_id:
-                        scraped_products.add(product_id)
-
-        except Exception as e:
-            print(f"⚠️ Warning: Could not load {summary_file}: {e}")
+                # Add successfully scraped products
+                for result in summary.get('results', []):
+                    if result.get('status') == 'success':
+                        scraped_products.add(result.get('product_id'))
+            except Exception as e:
+                print(f"⚠️ Warning: Could not load {summary_file}: {e}")
 
     print(f"📚 Found {len(scraped_products)} previously scraped products")
     return scraped_products
@@ -269,13 +278,11 @@ def filter_new_products(all_products, scraped_products):
 def resume_failed_scraping():
     """
     Function to resume scraping of products that failed previously
-    Updated to use organized folder structure and handle different JSON formats
     """
     print("🔄 Resuming failed scraping...")
 
-    # Search for existing summaries in organized folders
-    summary_files = glob.glob("scraping_summary*.json") + \
-        glob.glob("scraping_progress*.json")
+    # Search for existing summaries
+    summary_files = glob.glob("scraping_summary_v*.json")
     if not summary_files:
         print("❌ No previous scraping summaries found")
         return
@@ -285,55 +292,19 @@ def resume_failed_scraping():
     print(f"📄 Loading latest summary: {latest_summary}")
 
     with open(latest_summary, "r", encoding="utf-8") as f:
-        summary_data = json.load(f)
+        summary = json.load(f)
 
-    # Get already scraped products using updated logic
-    scraped_products = load_existing_scraped_products()
-
-    # Handle different JSON structures
+    # Find products that failed
     failed_products = []
-
-    # Check if summary_data is a dictionary with 'results' key
-    if isinstance(summary_data, dict) and 'results' in summary_data:
-        results_list = summary_data.get('results', [])
-    # Check if summary_data is directly a list
-    elif isinstance(summary_data, list):
-        results_list = summary_data
-    else:
-        print(f"⚠️ Unexpected JSON structure in {latest_summary}")
-        print(f"Structure type: {type(summary_data)}")
-        if isinstance(summary_data, dict):
-            print(f"Available keys: {list(summary_data.keys())}")
-        return
-
-    print(f"📊 Processing {len(results_list)} results from summary...")
-
-    # Find products that failed and aren't already scraped
-    for result in results_list:
-        # Handle different result structures
-        if isinstance(result, dict):
-            product_id = result.get('product_id')
-            status = result.get('status')
-            name = result.get('name', f'Product {product_id}')
-        elif isinstance(result, str):
-            # If result is just a product_id string
-            product_id = result
-            status = 'unknown'
-            name = f'Product {product_id}'
-        else:
-            print(f"⚠️ Skipping unexpected result format: {result}")
-            continue
-
-        # Only process failed products that haven't been scraped
-        if (status in ['error', 'no_reviews', 'unknown'] and
-                product_id and product_id not in scraped_products):
-
+    for result in summary.get('results', []):
+        if result.get('status') in ['error', 'no_reviews']:
+            # Create basic product structure
             product = {
-                'product_id': product_id,
-                'name': name,
+                'product_id': result.get('product_id'),
+                'name': result.get('name'),
                 'category': 'Retry',
                 'price': None,
-                'url': f"https://www.canadiantire.ca/en/pdp/product/{product_id}.html"
+                'url': f"https://www.canadiantire.ca/en/pdp/product/{result.get('product_id')}.html"
             }
             failed_products.append(product)
 
@@ -343,17 +314,12 @@ def resume_failed_scraping():
 
     print(f"🔄 Found {len(failed_products)} failed products to retry")
 
-    # Retry scraping using unified logic
+    # Retry scraping
     retry_results = scrape_product_reviews_batch(
-        failed_products,
-        max_workers=2,
-        save_to_folder="data_review"
-    )
+        failed_products, max_workers=2)
 
-    # Save retry results to organized folder
+    # Save retry results
     timestamp = int(time.time())
-    os.makedirs("retry_summary", exist_ok=True)
-
     retry_summary = {
         'timestamp': timestamp,
         'original_summary': latest_summary,
@@ -364,7 +330,7 @@ def resume_failed_scraping():
         'results': retry_results
     }
 
-    with open(f"retry_summary/retry_summary_{timestamp}.json", "w", encoding="utf-8") as f:
+    with open(f"retry_summary_{timestamp}.json", "w", encoding="utf-8") as f:
         json.dump(retry_summary, f, indent=2, ensure_ascii=False)
 
     print(
@@ -653,47 +619,6 @@ def massive_product_analysis_v5_optimized(total_limit=350, batch_size=50):
     return results
 
 
-def scrape_single_product_optimized(product_id, product_name="Unknown Product", save_to_folder="data_review"):
-    """
-    Unified optimized scraping function for single products
-    """
-    print(f"🔄 Processing {product_name} ({product_id})")
-
-    try:
-        # Use optimized limits from option 5
-        # Consistent with option 5
-        reviews = fetch_reviews(product_id, limit=50)
-        highlights = fetch_highlights(product_id)
-        features = fetch_features(product_id)
-
-        if reviews:
-            # Ensure folder exists
-            os.makedirs(save_to_folder, exist_ok=True)
-            filename = f"{save_to_folder}/reviews_{product_id}.json"
-            export_reviews_to_json(reviews, highlights, features, filename)
-            return {
-                'product_id': product_id,
-                'name': product_name,
-                'status': 'success',
-                'reviews_count': len(reviews),
-                'filename': filename
-            }
-        else:
-            return {
-                'product_id': product_id,
-                'name': product_name,
-                'status': 'no_reviews',
-                'reviews_count': 0
-            }
-    except Exception as e:
-        return {
-            'product_id': product_id,
-            'name': product_name,
-            'status': 'error',
-            'error': str(e)
-        }
-
-
 # Update main to include new options
 if __name__ == "__main__":
     choice = input(
@@ -705,37 +630,33 @@ if __name__ == "__main__":
     )
 
     if choice == "5":
-        # Incremental version (unchanged - already optimized)
+        # New incremental version
         total_limit = int(
             input("Total product limit (default 200): ") or "200")
         batch_size = int(input("Batch size (default 50): ") or "50")
         massive_product_analysis_v5_optimized(total_limit, batch_size)
 
     elif choice == "6":
-        # Resume failed products (now using unified logic)
+        # Resume failed products
         resume_failed_scraping()
 
     else:
-        # Individual product (now using unified logic)
+        # Original code for individual product
         product_id = input("Enter product_id: ") or "0762121P"
 
-        # Check if already scraped using option 5 logic
-        scraped_products = load_existing_scraped_products()
-
-        if product_id in scraped_products:
-            print(
-                f"⚠️ Product {product_id} already scraped. Continue anyway? (y/N)")
-            if input().lower() != 'y':
-                print("Skipping already scraped product.")
-                exit()
-
         print("Fetching reviews...")
-        result = scrape_single_product_optimized(
-            product_id, f"Product {product_id}")
+        reviews = fetch_reviews(product_id)
+        print(f"✅ Total reviews fetched: {len(reviews)}")
 
-        print(f"✅ Result: {result['status']}")
-        if result['status'] == 'success':
-            print(f"📁 File saved: {result['filename']}")
-            print(f"📊 Reviews count: {result['reviews_count']}")
-        elif result['status'] == 'error':
-            print(f"❌ Error: {result['error']}")
+        print("\nFetching highlights...")
+        highlights = fetch_highlights(product_id)
+        print(f"✅ Highlights found: {len(highlights.keys())}")
+
+        print("\nFetching features...")
+        features = fetch_features(product_id)
+        print(f"✅ Features found: {[f['feature'] for f in features]}")
+
+        print("\nExporting to JSON...")
+        if reviews:
+            export_reviews_to_json(reviews, highlights,
+                                   features, f"reviews_{product_id}.json")
